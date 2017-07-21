@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="WINDOWS-1252" standalone="no"?>
+<jardesc>
+    <jar path="mlab/mlab.jar"/>
+    <options buildIfNeeded="true" compress="true" descriptionLocation="/mlab/mlab.jardesc" exportErrors="true" exportWarnings="true" includeDirectoryEntries="false" overwrite="false" saveDescription="true" storeRefactorings="false" useSourceFolders="false"/>
+    <storedRefactorings deprecationInfo="true" structuralOnly="false"/>
+    <selectedProjects/>
+    <manifest generateManifest="true" manifestLocation="" manifestVersion="1.0" reuseManifest="false" saveManifest="false" usesManifest="true">
+        <sealing sealJar="false">
+            <packagesToSeal/>
+            <packagesToUnSeal/>
+        </sealing>
+    </manifest>
+    <selectedElements exportClassFiles="true" exportJavaFiles="true" exportOutputFolder="false">
+        <javaElement handleIdentifier="=mlab/&lt;com.vuze.plugins.mlab"/>
+        <javaElement handleIdentifier="=mlab/&lt;com.vuze.plugins.mlab.tools.ndt.swingemu"/>
+        <javaElement handleIdentifier="=mlab/&lt;com.vuze.plugins.mlab.internat"/>
+        <javaElement handleIdentifier="=mlab/&lt;com.vuze.plugins.mlab.tools.ndt"/>
+        <javaElement handleIdentifier="=mlab/&lt;com.vuze.plugins.mlab.ui.resources"/>
+        <javaElement handleIdentifier="=mlab/&lt;com.vuze.plugins.mlab.ui"/>
+    </selectedElements>
+</jardesc>

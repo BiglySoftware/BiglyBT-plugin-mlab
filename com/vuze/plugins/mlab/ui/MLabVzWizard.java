@@ -1,0 +1,683 @@
+package com.vuze.plugins.mlab.ui;
+
+import java.util.*;
+
+import com.biglybt.core.CoreFactory;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.MouseEvent;
+import org.eclipse.swt.events.MouseListener;
+import org.eclipse.swt.widgets.ProgressBar;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Text;
+
+import com.biglybt.core.config.COConfigurationManager;
+import com.biglybt.core.config.impl.TransferSpeedValidator;
+import com.biglybt.core.internat.MessageText;
+import com.biglybt.core.util.*;
+import com.biglybt.pif.download.Download;
+import com.biglybt.pif.download.DownloadManager;
+import com.biglybt.pif.ipc.IPCException;
+import com.biglybt.pif.ipc.IPCInterface;
+
+import com.biglybt.core.speedmanager.SpeedManager;
+import com.biglybt.core.speedmanager.SpeedManagerLimitEstimate;
+import com.biglybt.ui.UserPrompterResultListener;
+import com.biglybt.ui.swt.Utils;
+import com.biglybt.ui.swt.skin.*;
+import com.biglybt.ui.swt.views.skin.VuzeMessageBox;
+import com.biglybt.ui.swt.views.skin.VuzeMessageBoxListener;
+import com.vuze.plugins.mlab.MLabPlugin;
+import com.vuze.plugins.mlab.MLabPlugin.ToolListener;
+
+public class MLabVzWizard
+{
+	protected static final String PATH_SKIN_DEFS = "com/vuze/plugins/mlab/ui/resources/";
+
+	private static final String FILE_SKINIMAGES_DEFS = "images";
+	
+	private final int BUTTON_OK = 0;
+
+	private volatile MLabPlugin.ToolRun runner;
+
+	private volatile boolean cancelled;
+
+	StringBuffer lg = new StringBuffer();
+
+	private final MLabPlugin mLabPlugin;
+
+	private boolean downloads_paused;
+
+	private StringBuffer summary = new StringBuffer();
+
+	private StringBuffer details = new StringBuffer();
+
+	protected Long up_rate;
+
+	protected Long down_rate;
+
+	protected SWTSkinObjectTextbox soDetails;
+
+	private VuzeMessageBox boxTest;
+
+	private int maxActiveTorrents;
+
+	private int maxDownloads;
+
+	private long uploadLimit;
+
+	private final IPCInterface callback;
+
+	private boolean limitsApplied;
+
+	public MLabVzWizard(MLabPlugin mLabPlugin, IPCInterface callback,
+			Map<String, Object> args) {
+		this.mLabPlugin = mLabPlugin;
+		this.callback = callback;
+	}
+
+	public void open() {
+		openWelcome();
+	}
+
+	private void openWelcome() {
+		String title = MessageText.getString("mlab.vzwiz.welcome.subtitle");
+		final VuzeMessageBox box = new VuzeMessageBox(title, title, new String[] {
+			MessageText.getString("Button.continue"),
+			MessageText.getString("Button.cancel"),
+		}, 0);
+		box.setSubTitle("");
+
+		box.setButtonVals(new Integer[] {
+			BUTTON_OK,
+			SWT.CANCEL
+		});
+
+		box.setListener(new VuzeMessageBoxListener() {
+			@Override
+			public void shellReady(Shell shell, SWTSkinObjectContainer soExtra) {
+				SWTSkin skin = soExtra.getSkin();
+				addResourceBundle(skin, PATH_SKIN_DEFS, "skin_speedtest");
+
+				box.setIconResource("image.mlab.header");
+
+				skin.createSkinObject("speedtest.welcome", "speedtest.welcome", soExtra);
+
+			}
+		});
+
+		box.open(new UserPrompterResultListener() {
+			@Override
+			public void prompterClosed(int result) {
+
+				if (result == 0) {
+					openTest();
+				} else {
+					cleanup();
+				}
+			}
+		});
+	}
+
+	protected void openTest() {
+		String title = MessageText.getString("mlab.vzwiz.welcome.subtitle");
+		boxTest = new VuzeMessageBox(title, title, new String[] {
+			MessageText.getString("Button.apply"),
+			MessageText.getString("Button.cancel"),
+		}, 0);
+		boxTest.setSubTitle("");
+
+		boxTest.setButtonVals(new Integer[] {
+			BUTTON_OK,
+			SWT.CANCEL
+		});
+		boxTest.setButtonEnabled(BUTTON_OK, false);
+
+		boxTest.setListener(new VuzeMessageBoxListener() {
+			@Override
+			public void shellReady(Shell shell, SWTSkinObjectContainer soExtra) {
+				final SWTSkin skin = soExtra.getSkin();
+				addResourceBundle(skin, PATH_SKIN_DEFS, "skin_speedtest");
+
+				boxTest.setIconResource("image.mlab.header");
+
+				SWTSkinObject so = skin.createSkinObject("speedtest.run",
+						"speedtest.run", soExtra);
+
+				SWTSkinObject soProgressA = skin.getSkinObject("speedtest-progress", so);
+				if (soProgressA instanceof SWTSkinObjectContainer) {
+					SWTSkinObjectContainer soProgress = (SWTSkinObjectContainer) soProgressA;
+					final ProgressBar pb = new ProgressBar(soProgress.getComposite(), SWT.NULL);
+					
+					final int CYCLE_MILLIS = 60*1000;
+
+					pb.setMinimum( 0 );
+					pb.setMaximum( CYCLE_MILLIS );
+					
+					new AEThread2( "ProgressUpdater" )
+					{						
+						final long start_time = SystemTime.getMonotonousTime();
+						
+						@Override
+						public void
+						run()
+						{
+							while( !pb.isDisposed()){
+								
+								try{
+									Thread.sleep(250);
+									
+								}catch( Throwable e ){
+									
+									break;
+								}
+								
+								Utils.execSWTThread(
+									new Runnable()
+									{
+										@Override
+										public void
+										run()
+										{
+											if ( pb.isDisposed() || !pb.isVisible()){
+												
+												return;
+											}
+											
+											long elapsed = SystemTime.getMonotonousTime() - start_time;
+											
+											int x = (int)( elapsed % CYCLE_MILLIS );
+											
+											pb.setSelection( x );
+										}
+									});
+							}
+						}
+					}.start();
+					
+					pb.setLayoutData(Utils.getFilledFormData());
+				}
+
+				soDetails = (SWTSkinObjectTextbox) skin.getSkinObject(
+						"details-textbox", so);
+
+				final SWTSkinObjectImage soTwist = (SWTSkinObjectImage) skin.getSkinObject(
+						"twist", so);
+
+				SWTSkinObject soDetailsHeader = skin.getSkinObject("details-header-text");
+				if (soDetailsHeader != null) {
+					MouseListener mouseListener = new MouseListener() {
+
+						@Override
+						public void mouseUp(MouseEvent e) {
+							if (soDetails != null && !soDetails.isDisposed()) {
+								boolean newVisiblility = !soDetails.isVisible();
+								if (soTwist != null && !soTwist.isDisposed()) {
+									soTwist.setImageByID("image.mlab."
+											+ (newVisiblility ? "expanded" : "collapsed"), null);
+								}
+								soDetails.setVisible(newVisiblility);
+								skin.layout();
+							}
+						}
+
+						@Override
+						public void mouseDown(MouseEvent e) {
+						}
+
+						@Override
+						public void mouseDoubleClick(MouseEvent e) {
+						}
+					};
+					soDetailsHeader.getControl().addMouseListener(mouseListener);
+					if (soTwist != null) {
+						soTwist.getControl().addMouseListener(mouseListener);
+					}
+				}
+
+				if (soDetails != null) {
+					String details = "";
+					soDetails.setText(details == null ? "" : details);
+					soDetails.setVisible(false);
+				}
+
+				pauseAndRun(new AERunnable() {
+					@Override
+					public void runSupport() {
+						runNDT();
+					}
+				});
+
+			}
+		});
+
+		boxTest.open(new UserPrompterResultListener() {
+			@Override
+			public void prompterClosed(int result) {
+
+				if (result == 0) {
+					if (uploadLimit == 0) {
+						openUnavailable();
+					} else {
+						openDone();
+					}
+				} else {
+					cancelled = true;
+					cleanup();
+				}
+			}
+		});
+	}
+
+	public void cleanup() {
+		if (downloads_paused) {
+
+			mLabPlugin.getPluginInterface().getDownloadManager().resumeDownloads();
+		}
+
+		try {
+			if (cancelled) {
+
+				callback.invoke("cancelled", new Object[] {});
+
+			} else {
+
+				Map<String, Object> args = new HashMap<String, Object>();
+
+				args.put("up", up_rate);
+				args.put("down", down_rate);
+				args.put("maxActiveTorrents", maxActiveTorrents);
+				args.put("maxDownloads", maxDownloads);
+				args.put("uploadLimit", uploadLimit);
+				args.put("limitsApplied", limitsApplied);
+
+				callback.invoke("results", new Object[] {
+					args
+				});
+
+			}
+		} catch (IPCException e) {
+			Debug.out(e);
+		}
+	}
+
+	public static void addResourceBundle(SWTSkin skin, String path, String name) {
+		String sFile = path + name;
+		ClassLoader loader = MLabVzWizard.class.getClassLoader();
+		SWTSkinProperties skinProperties = skin.getSkinProperties();
+		try {
+			ResourceBundle subBundle = ResourceBundle.getBundle(sFile,
+					Locale.getDefault(), loader);
+			skinProperties.addResourceBundle(subBundle, path, loader);
+		} catch (MissingResourceException mre) {
+			Debug.out(mre);
+		}
+
+		// Images stored in plugin must be loaded using our classloader, so
+		// we put the image ref in their own properties file and load them in a
+		// new SkinProperties
+		SWTSkinPropertiesImpl imageProps = new SWTSkinPropertiesImpl(loader,
+				PATH_SKIN_DEFS, FILE_SKINIMAGES_DEFS);
+		skin.getImageLoader(skinProperties).addSkinProperties(imageProps);
+	}
+
+	private void pauseAndRun(final AERunnable run) {
+		final int waitCycles = pauseDownloads() ? 50 : 0;
+		if (waitCycles > 0) {
+
+			appendLog( mLabPlugin.getLocalisedText( "mlab.log.pausing.downloads" ));
+		}
+
+		new AEThread2("waiter") {
+			@Override
+			public void run() {
+				try {
+					for (int i = 0; i < waitCycles && !cancelled; i++) {
+
+						appendLog(".");
+
+						if (i == waitCycles - 1) {
+
+							appendLog("\n");
+						}
+
+						try {
+							Thread.sleep(100);
+
+						} catch (Throwable e) {
+
+						}
+					}
+				} finally {
+
+					run.run();
+				}
+			}
+		}.start();
+
+	}
+
+	private void runNDT() {
+		if (cancelled) {
+
+			return;
+		}
+
+		runner = mLabPlugin.runNDT(new ToolListener() {
+			{
+				summary.setLength(0);
+				details.setLength(0);
+			}
+
+			@Override
+			public void reportSummary(final String str) {
+				summary.append(str);
+				summary.append("\n");
+
+				appendLog(str + "\n");
+			}
+
+			@Override
+			public void reportDetail(String str) {
+				details.append(str);
+				details.append("\n");
+			}
+
+			@Override
+			public void complete(final Map<String, Object> results) {
+				up_rate = (Long) results.get("up");
+				down_rate = (Long) results.get("down");
+
+				calculateLimits();
+				
+				boxTest.closeWithButtonVal(BUTTON_OK);
+
+				runner = null;
+			}
+		});
+
+		if (cancelled) {
+
+			runner.cancel();
+		}
+	}
+
+	protected void openDone() {
+
+		String title = MessageText.getString("mlab.vzwiz.result.subtitle");
+		boxTest = new VuzeMessageBox(title, title, new String[] {
+			MessageText.getString("Button.apply"),
+			MessageText.getString("Button.cancel"),
+		}, 0);
+		boxTest.setSubTitle("");
+
+		boxTest.setButtonVals(new Integer[] {
+			BUTTON_OK,
+			SWT.CANCEL
+		});
+
+		boxTest.setListener(new VuzeMessageBoxListener() {
+			@Override
+			public void shellReady(Shell shell, SWTSkinObjectContainer soExtra) {
+				final SWTSkin skin = soExtra.getSkin();
+				addResourceBundle(skin, PATH_SKIN_DEFS, "skin_speedtest");
+
+				boxTest.setIconResource("image.mlab.header");
+
+				SWTSkinObject so = skin.createSkinObject("speedtest.result",
+						"speedtest.result", soExtra);
+
+				String ul = DisplayFormatters.formatByteCountToKiBEtcPerSec(up_rate)
+						+ " (" + DisplayFormatters.formatByteCountToBitsPerSec(up_rate)
+						+ ")";
+				SWTSkinObjectText soUL = (SWTSkinObjectText) skin.getSkinObject("speedtest-ul");
+				soUL.setText(ul);
+
+				String result = DisplayFormatters.formatByteCountToKiBEtcPerSec(uploadLimit);
+				SWTSkinObjectText soResult = (SWTSkinObjectText) skin.getSkinObject("speedtest-result");
+				soResult.setText(result);
+
+				soDetails = (SWTSkinObjectTextbox) skin.getSkinObject(
+						"details-textbox", so);
+
+				final SWTSkinObjectImage soTwist = (SWTSkinObjectImage) skin.getSkinObject(
+						"twist", so);
+
+				SWTSkinObject soDetailsHeader = skin.getSkinObject("details-header-text");
+				if (soDetailsHeader != null) {
+					MouseListener mouseListener = new MouseListener() {
+
+						@Override
+						public void mouseUp(MouseEvent e) {
+							if (soDetails != null && !soDetails.isDisposed()) {
+								boolean newVisiblility = !soDetails.isVisible();
+								if (soTwist != null && !soTwist.isDisposed()) {
+									soTwist.setImageByID("image.mlab."
+											+ (newVisiblility ? "expanded" : "collapsed"), null);
+								}
+								soDetails.setVisible(newVisiblility);
+								skin.layout();
+							}
+						}
+
+						@Override
+						public void mouseDown(MouseEvent e) {
+						}
+
+						@Override
+						public void mouseDoubleClick(MouseEvent e) {
+						}
+					};
+					soDetailsHeader.getControl().addMouseListener(mouseListener);
+					if (soTwist != null) {
+						soTwist.getControl().addMouseListener(mouseListener);
+					}
+				}
+
+				if (soDetails != null) {
+					soDetails.setText(lg.toString());
+					soDetails.setVisible(false);
+				}
+			}
+		});
+
+		boxTest.open(new UserPrompterResultListener() {
+			@Override
+			public void prompterClosed(int result) {
+				cancelled = result != 0;
+				if (!cancelled) {
+					applyLimits();
+				}
+				cleanup();
+			}
+		});
+	}
+
+	protected void openUnavailable() {
+
+		String title = MessageText.getString("mlab.vzwiz.result.subtitle");
+		boxTest = new VuzeMessageBox(title, title, new String[] {
+			MessageText.getString("Button.ok"),
+		}, 0);
+		boxTest.setSubTitle("");
+
+		boxTest.setListener(new VuzeMessageBoxListener() {
+			@Override
+			public void shellReady(Shell shell, SWTSkinObjectContainer soExtra) {
+				final SWTSkin skin = soExtra.getSkin();
+				addResourceBundle(skin, PATH_SKIN_DEFS, "skin_speedtest");
+
+				boxTest.setIconResource("image.mlab.header");
+
+				SWTSkinObject so = skin.createSkinObject("speedtest.noresult",
+						"speedtest.noresult", soExtra);
+
+				soDetails = (SWTSkinObjectTextbox) skin.getSkinObject(
+						"details-textbox", so);
+
+				final SWTSkinObjectImage soTwist = (SWTSkinObjectImage) skin.getSkinObject(
+						"twist", so);
+
+				SWTSkinObject soDetailsHeader = skin.getSkinObject("details-header-text");
+				if (soDetailsHeader != null) {
+					MouseListener mouseListener = new MouseListener() {
+
+						@Override
+						public void mouseUp(MouseEvent e) {
+							if (soDetails != null && !soDetails.isDisposed()) {
+								boolean newVisiblility = !soDetails.isVisible();
+								if (soTwist != null && !soTwist.isDisposed()) {
+									soTwist.setImageByID("image.mlab."
+											+ (newVisiblility ? "expanded" : "collapsed"), null);
+								}
+								soDetails.setVisible(newVisiblility);
+								skin.layout();
+							}
+						}
+
+						@Override
+						public void mouseDown(MouseEvent e) {
+						}
+
+						@Override
+						public void mouseDoubleClick(MouseEvent e) {
+						}
+					};
+					soDetailsHeader.getControl().addMouseListener(mouseListener);
+					if (soTwist != null) {
+						soTwist.getControl().addMouseListener(mouseListener);
+					}
+				}
+
+				if (soDetails != null) {
+					soDetails.setText(lg.toString());
+					soDetails.setVisible(false);
+				}
+			}
+		});
+
+		boxTest.open(new UserPrompterResultListener() {
+			@Override
+			public void prompterClosed(int result) {
+				cleanup();
+			}
+		});
+	}
+
+	protected void calculateLimits() {
+
+		if (up_rate == 0) {
+			return;
+		}
+
+		uploadLimit = (up_rate / 5) * 4;
+
+		uploadLimit = (uploadLimit / 1024) * 1024;
+
+		if (uploadLimit < 5 * 1024) {
+
+			uploadLimit = 5 * 1024;
+		}
+
+		int nbMaxActive = (int) (Math.pow(uploadLimit / 1024, 0.34) * 0.92);
+		int nbMaxUploads = (int) (Math.pow(uploadLimit / 1024, 0.25) * 1.68);
+		int nbMaxDownloads = (nbMaxActive * 4) / 5;
+
+		if (nbMaxDownloads == 0) {
+			nbMaxDownloads = 1;
+		}
+
+		if (nbMaxUploads > 50) {
+			nbMaxUploads = 50;
+		}
+
+		maxActiveTorrents = nbMaxActive;
+		maxDownloads = nbMaxDownloads;
+	}
+
+	private void applyLimits() {
+		if (uploadLimit <= 0) {
+			return;
+		}
+		COConfigurationManager.setParameter(
+				TransferSpeedValidator.AUTO_UPLOAD_ENABLED_CONFIGKEY, false);
+		COConfigurationManager.setParameter(
+				TransferSpeedValidator.AUTO_UPLOAD_SEEDING_ENABLED_CONFIGKEY, false);
+		COConfigurationManager.setParameter("Max Upload Speed KBs",
+				uploadLimit / 1024);
+		COConfigurationManager.setParameter("enable.seedingonly.upload.rate", false);
+		COConfigurationManager.setParameter("max active torrents",
+				maxActiveTorrents);
+		COConfigurationManager.setParameter("max downloads", maxDownloads);
+
+		try {
+			SpeedManager sm = CoreFactory.getSingleton().getSpeedManager();
+
+			sm.setEstimatedUploadCapacityBytesPerSec((int) uploadLimit,
+					SpeedManagerLimitEstimate.TYPE_MEASURED);
+
+		} catch (Throwable e) {
+
+			Debug.out(e);
+		}
+
+		// toggle to ensure listeners get the message that they should recalc things
+
+		COConfigurationManager.setParameter("Auto Adjust Transfer Defaults", false);
+		COConfigurationManager.setParameter("Auto Adjust Transfer Defaults", true);
+
+		limitsApplied = true;
+	}
+
+	protected void appendLog(String string) {
+		lg.append(string);
+		soDetails.setText(lg.toString());
+		Utils.execSWTThread(new AERunnable() {
+			@Override
+			public void runSupport() {
+				Text text = soDetails.getTextControl();
+				if (text != null && !text.isDisposed()) {
+					text.setSelection(text.getText().length());
+					text.showSelection();
+				}
+			}
+		});
+	}
+
+	protected boolean pauseDownloads() {
+		if (downloads_paused) {
+
+			return (false);
+		}
+
+		DownloadManager download_manager = mLabPlugin.getPluginInterface().getDownloadManager();
+
+		Download[] downloads = download_manager.getDownloads();
+
+		boolean active = false;
+
+		for (Download d : downloads) {
+
+			int state = d.getState();
+
+			if (state != Download.ST_ERROR && state != Download.ST_STOPPED) {
+
+				active = true;
+
+				break;
+			}
+		}
+
+		if ( active ){
+
+			downloads_paused = true;
+
+			download_manager.pauseDownloads();
+
+			return (true);
+			
+		} else {
+
+			return (false);
+		}
+	}
+}

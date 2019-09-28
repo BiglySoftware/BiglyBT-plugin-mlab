@@ -243,21 +243,44 @@ MLabPlugin
 						
 						String server_host = null;
 						
-						try{
+						// 28/09/2019 - noticed that old host is dead, figured out new one hopefully
 						
-							InputStream is = plugin_interface.getUtilities().getResourceDownloaderFactory().create( new URL( "http://ns.measurementlab.net/ndt?format=json" )).download();
+						
+						try{
+							
+							InputStream is = plugin_interface.getUtilities().getResourceDownloaderFactory().create( new URL( "https://mlab-ns.appspot.com/ndt_ssl?format=json" )).download();
 							
 							Map map = JSONUtils.decodeJSON( FileUtil.readInputStreamAsString( is, 32*1024, "UTF-8" ));
-							
-							URL url = new URL((String)map.get( "url" ));
-							
-							server_host = url.getHost();
+														
+							server_host = (String)map.get( "fqdn" );
 							
 							logger.log( "Selected server: " + server_host );
 							
 						}catch( Throwable e ){
 							
 							Debug.out( "Failed to get server", e );
+						}
+						
+						if ( server_host == null ){
+							
+								// old dead way, keep here for historical whatevers
+							
+							try{
+							
+								InputStream is = plugin_interface.getUtilities().getResourceDownloaderFactory().create( new URL( "http://ns.measurementlab.net/ndt?format=json" )).download();
+								
+								Map map = JSONUtils.decodeJSON( FileUtil.readInputStreamAsString( is, 32*1024, "UTF-8" ));
+								
+								URL url = new URL((String)map.get( "url" ));
+								
+								server_host = url.getHost();
+								
+								logger.log( "Selected server: " + server_host );
+								
+							}catch( Throwable e ){
+								
+								Debug.out( "Failed to get server", e );
+							}
 						}
 						
 						

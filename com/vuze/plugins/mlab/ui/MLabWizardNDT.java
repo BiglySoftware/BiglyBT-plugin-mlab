@@ -28,6 +28,7 @@ import java.util.Map;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StackLayout;
 import org.eclipse.swt.custom.StyledText;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
@@ -112,17 +113,19 @@ MLabWizardNDT
         
         controlPanel.setLayout( stack_layout );
         
+        Color bg = Utils.isDarkAppearanceNative()?null:Colors.white;
+        
 		progress_panel 	= new Composite( controlPanel, SWT.NONE);
 		layout = new GridLayout();
 		layout.numColumns = 1;
 		progress_panel.setLayout(layout);
-		progress_panel.setBackground( Colors.white );
+		progress_panel.setBackground( bg );
 
 		final ProgressBar prog = new ProgressBar( progress_panel, SWT.HORIZONTAL );
 	   	gridData = new GridData(GridData.FILL_HORIZONTAL );
     	gridData.horizontalSpan = 1;
     	prog.setLayoutData(gridData);
-    	prog.setBackground( Colors.white );
+    	prog.setBackground( bg );
 		prog.setMinimum(0);
 		prog.setMaximum(100);	
 		
@@ -131,12 +134,12 @@ MLabWizardNDT
 		layout = new GridLayout();
 		layout.numColumns = 3;
 		status_panel.setLayout(layout);
-		status_panel.setBackground( Colors.white );
+		status_panel.setBackground( bg );
 		
 		result_label	= new Label( status_panel, SWT.NULL );
 	   	gridData = new GridData(GridData.FILL_HORIZONTAL );
 	   	result_label.setLayoutData(gridData);
-	   	result_label.setBackground( Colors.white );
+	   	result_label.setBackground( bg );
 	   	
 	   	Button details_button = new Button( status_panel, SWT.NULL );
 	   	details_button.setText( MessageText.getString( "mlab.wizard.details" ));

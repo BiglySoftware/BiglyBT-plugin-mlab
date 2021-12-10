@@ -1647,7 +1647,7 @@ class MyTextPane extends JTextPane
           results.append(messages.getString("resultsParseError")  + "\n");
           results.append(ex + "\n");
       }
-      if ((tests & TEST_MID) == TEST_MID) {
+      if ((tests & TEST_MID) == TEST_MID && tmpstr2 != null ) {
           middleboxResults(tmpstr2);
       }
 	  

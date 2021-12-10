@@ -1,6 +1,7 @@
 /.classpath
 /.project
 *.class
-/mlab_0.5.biglybt
-/mlab_0.5.jar
-/mlab_0.5.zip
+*.jar
+*.zip
+*.biglybt
+

@@ -25,12 +25,14 @@ package com.vuze.plugins.mlab.ui;
 
 
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Label;
 import com.biglybt.core.internat.MessageText;
+import com.biglybt.ui.swt.Utils;
 import com.biglybt.ui.swt.components.LinkLabel;
 import com.biglybt.ui.swt.mainwindow.Colors;
 import com.biglybt.ui.swt.wizard.AbstractWizardPanel;
@@ -56,11 +58,13 @@ MLabWizardStart
         wizard.setPreviousEnabled(false);
         wizard.setFinishEnabled(false);
 
+        Color bg = Utils.isDarkAppearanceNative()?null:Colors.white;
+
         Composite rootPanel = wizard.getPanel();
 		GridLayout layout = new GridLayout();
 		layout.numColumns = 2;
 		rootPanel.setLayout(layout);
-		rootPanel.setBackground( Colors.white );
+		rootPanel.setBackground( bg );
 		
 		Image img = wizard.getImage( "com/vuze/plugins/mlab/ui/resources/mlab.png" );
 		
@@ -68,12 +72,12 @@ MLabWizardStart
         GridData gridData = new GridData();
         img_label.setLayoutData(gridData);
         img_label.setImage( img );
-        img_label.setBackground( Colors.white );
+        img_label.setBackground( bg );
         
 		Label info_label = new Label( rootPanel, SWT.WRAP );
 		gridData = new GridData(GridData.FILL_HORIZONTAL);
 		info_label.setLayoutData(gridData);
-		info_label.setBackground( Colors.white );
+		info_label.setBackground( bg );
 		info_label.setText( MessageText.getString( "mlab.info" ));
  
 		LinkLabel link = new LinkLabel( rootPanel, "mlab.link", MessageText.getString( "mlab.link.url" ));
@@ -83,14 +87,14 @@ MLabWizardStart
 		gridData.horizontalSpan=2;
 		gridData.verticalIndent=30;
 		link_label.setLayoutData(gridData);
-        link_label.setBackground( Colors.white );
+        link_label.setBackground( bg );
         
 		Label next_label = new Label( rootPanel, SWT.NULL );
 		gridData = new GridData(GridData.FILL_HORIZONTAL);
 		gridData.horizontalSpan=2;
 		gridData.verticalIndent=30;
 		next_label.setLayoutData(gridData);
-		next_label.setBackground( Colors.white );
+		next_label.setBackground( bg );
 		next_label.setText( MessageText.getString("mlab.wizard.intro.next"));
 	}
 	
